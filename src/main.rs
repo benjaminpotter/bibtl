@@ -1,26 +1,88 @@
+use bibtl::DatabaseCursor;
 use clap::{Parser, Subcommand};
-use ratatui::{DefaultTerminal, Frame};
+use ratatui::{
+    DefaultTerminal, Frame,
+    buffer::Buffer,
+    layout::{Constraint, Direction, Layout, Rect},
+    widgets::{Block, Borders, Paragraph, Widget},
+};
 use std::path::PathBuf;
 
 fn main() -> color_eyre::Result<()> {
     let cli = Cli::parse();
 
-    color_eyre::install()?;
-    ratatui::run(app)?;
+    match cli.command {
+        BibtlCommand::Dedup { bib_paths } => todo!(),
+        BibtlCommand::Review { bib_path } => {
+            ratatui::run(|terminal| App::default().run(terminal))?;
+        }
+    }
+
     Ok(())
 }
 
-fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
-    loop {
-        terminal.draw(render)?;
-        if crossterm::event::read()?.is_key_press() {
-            break Ok(());
+#[derive(Debug, Default)]
+struct App {
+    cursor: DatabaseCursor,
+    state: AppState,
+}
+
+impl App {
+    fn run(&mut self, terminal: &mut DefaultTerminal) -> std::io::Result<()> {
+        while self.state != AppState::Done {
+            terminal.draw(|frame| self.draw(frame))?;
+            self.handle_events()?;
         }
+
+        Ok(())
+    }
+
+    fn draw(&self, frame: &mut Frame) {
+        frame.render_widget(self, frame.area());
+    }
+
+    fn handle_events(&mut self) -> std::io::Result<()> {
+        if crossterm::event::read()?.is_key_press() {
+            self.state = AppState::Done;
+        }
+
+        Ok(())
     }
 }
 
-fn render(frame: &mut Frame) {
-    frame.render_widget("hello world", frame.area());
+impl Widget for &App {
+    fn render(self, area: Rect, buf: &mut Buffer)
+    where
+        Self: Sized,
+    {
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(vec![Constraint::Percentage(10), Constraint::Fill(1)])
+            .split(area);
+
+        Paragraph::new("")
+            .block(
+                Block::new()
+                    .title("Publication Title")
+                    .borders(Borders::ALL),
+            )
+            .render(layout[0], buf);
+
+        Paragraph::new("")
+            .block(
+                Block::new()
+                    .title("Publication Abstract")
+                    .borders(Borders::ALL),
+            )
+            .render(layout[1], buf);
+    }
+}
+
+#[derive(Debug, Default, PartialEq)]
+enum AppState {
+    #[default]
+    Running,
+    Done,
 }
 
 #[derive(Parser)]

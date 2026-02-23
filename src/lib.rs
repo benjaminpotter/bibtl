@@ -1,3 +1,6 @@
+#[derive(Clone, Debug, PartialEq, Hash, Default)]
+pub struct DatabaseCursor {}
+
 #[derive(Clone, Debug, PartialEq, Hash)]
 pub struct Entry {
     doi: String,
