@@ -1,6 +1,17 @@
+use biblatex::{Bibliography, ChunksExt, ParseError};
 use std::{fs::File, io::Read, path::Path};
+use thiserror::Error;
 
-use biblatex::{Bibliography, ChunksExt};
+pub mod tui;
+
+#[derive(Error, Debug)]
+pub enum DatabaseError {
+    #[error("failed to parse biblatex: {0}")]
+    BibLatexError(#[from] ParseError),
+
+    #[error("failed to open database")]
+    IOError(#[from] std::io::Error),
+}
 
 #[derive(Clone, Debug, PartialEq, Hash, Default)]
 pub struct Database {
@@ -8,12 +19,12 @@ pub struct Database {
 }
 
 impl Database {
-    pub fn from_bib(bib_path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
+    pub fn from_bib(bib_path: impl AsRef<Path>) -> Result<Self, DatabaseError> {
         let mut file = File::open(bib_path)?;
         let mut buf = String::new();
         file.read_to_string(&mut buf)?;
 
-        let bibliography = Bibliography::parse(&buf).unwrap();
+        let bibliography = Bibliography::parse(&buf)?;
         let entries: Vec<Entry> = bibliography
             .into_iter()
             .filter_map(|entry| {
@@ -27,11 +38,25 @@ impl Database {
 
         Ok(Self { entries })
     }
-}
 
-impl Database {
+    #[must_use]
     pub fn entry(&self, cursor: DatabaseCursor) -> &Entry {
         &self.entries[cursor.0]
+    }
+
+    #[must_use]
+    pub fn entries(&self) -> Vec<&Entry> {
+        self.entries.iter().collect()
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
@@ -53,7 +78,7 @@ pub struct Entry {
 
 #[cfg(test)]
 mod tests {
-    use biblatex::{Bibliography, ChunksExt};
+    use biblatex::{Bibliography, ChunksExt, ParseError, ParseErrorKind, Token};
 
     #[test]
     fn load_bibtex() {
@@ -66,5 +91,18 @@ mod tests {
         assert_eq!(author[0].name, "Tolkien");
         assert_eq!(title, "The Lord of the Rings");
         assert_eq!(abstr, "An adventure!");
+    }
+
+    #[test]
+    fn load_bibtex_eof() {
+        const SRC: &str = include_str!("../tests/fixtures/eof.bib");
+        assert_eq!(
+            Bibliography::parse(SRC),
+            // symbols $ and % in the abstract cause eof
+            Err(ParseError {
+                span: 1928..1928,
+                kind: biblatex::ParseErrorKind::UnexpectedEof,
+            })
+        );
     }
 }
