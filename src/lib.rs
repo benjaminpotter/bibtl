@@ -1,4 +1,4 @@
-use biblatex::{Bibliography, ChunksExt, ParseError};
+use biblatex::{Bibliography, Chunk, Chunks, ChunksExt, ParseError, Spanned};
 use std::{fs::File, io::Read, path::Path};
 use thiserror::Error;
 
@@ -31,12 +31,44 @@ impl Database {
                 Some(Entry {
                     doi: entry.doi().ok()?,
                     title: entry.title().ok()?.format_verbatim(),
-                    abstr: entry.abstract_().ok()?.format_verbatim(),
+                    abstr: entry
+                        .abstract_()
+                        .ok()
+                        .map_or(String::new(), ChunksExt::format_verbatim),
                 })
             })
             .collect();
 
         Ok(Self { entries })
+    }
+
+    #[must_use]
+    pub fn from_entries(entries: impl IntoIterator<Item = Entry>) -> Self {
+        Self {
+            entries: entries.into_iter().collect(),
+        }
+    }
+
+    #[must_use]
+    pub fn to_bib(&self) -> String {
+        let mut bibliography = Bibliography::new();
+
+        for (i, entry) in self.entries.iter().enumerate() {
+            let key = format!("ref{i:05}");
+            let entry_type = biblatex::EntryType::Article;
+            let mut bl_entry = biblatex::Entry::new(key, entry_type);
+
+            let title = [Spanned::detached(Chunk::Verbatim(entry.title.clone()))].to_vec();
+            let abstr = [Spanned::detached(Chunk::Verbatim(entry.abstr.clone()))].to_vec();
+
+            bl_entry.set_doi(entry.doi.clone());
+            bl_entry.set_title(title);
+            bl_entry.set_abstract_(abstr);
+
+            bibliography.insert(bl_entry);
+        }
+
+        bibliography.to_biblatex_string()
     }
 
     #[must_use]
@@ -104,5 +136,10 @@ mod tests {
                 kind: biblatex::ParseErrorKind::UnexpectedEof,
             })
         );
+    }
+
+    #[test]
+    fn load_text() {
+        const SRC: &str = include_str!("../tests/fixtures/wos.txt");
     }
 }

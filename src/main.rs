@@ -1,6 +1,11 @@
 use bibtl::{Database, tui::App};
 use clap::{Parser, Subcommand};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 fn main() -> color_eyre::Result<()> {
     let cli = Cli::parse();
@@ -26,7 +31,30 @@ fn main() -> color_eyre::Result<()> {
 
             println!("total: {total}");
         }
-        BibtlCommand::Dedup { bib_paths } => todo!(),
+        BibtlCommand::Dedup { bib_paths } => {
+            let mut map = HashMap::new();
+            for path in bib_paths {
+                match Database::from_bib(&path) {
+                    Ok(db) => {
+                        for entry in db.entries() {
+                            map.entry(entry.doi.clone()).or_insert(entry.clone());
+                        }
+                    }
+                    Err(e) => {
+                        println!("failed to parse database at path: {}", path.display());
+                        if cli.verbose {
+                            println!("--> {e}");
+                        }
+                    }
+                }
+            }
+
+            println!("found {} entries", map.len());
+
+            let db = Database::from_entries(map.into_values());
+            let mut file = File::create("database.bib").unwrap();
+            let _ = file.write_all(&db.to_bib().into_bytes());
+        }
         BibtlCommand::Review { bib_path } => {
             ratatui::run(|terminal| App::from_bib(bib_path).unwrap().run(terminal))?;
         }
